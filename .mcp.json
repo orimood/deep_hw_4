@@ -1,0 +1,42 @@
+{
+  "mcpServers": {
+    "github": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github@latest"
+      ],
+      "env": {}
+    },
+    "context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ],
+      "env": {}
+    },
+    "word-document-server": {
+      "type": "stdio",
+      "command": "/Users/orimood/Office-Word-MCP-Server/.venv/bin/python",
+      "args": [
+        "/Users/orimood/Office-Word-MCP-Server/word_mcp_server.py"
+      ],
+      "env": {
+        "PYTHONPATH": "/Users/orimood/Office-Word-MCP-Server",
+        "MCP_TRANSPORT": "stdio"
+      }
+    },
+    "jupyter": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@anthropic/mcp-server-jupyter-notebook@latest"
+      ],
+      "env": {}
+    }
+  }
+}
