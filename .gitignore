@@ -1,6 +1,6 @@
 # Virtual environment
-venv/
 .venv/
+venv/
 
 # Python
 __pycache__/
@@ -10,7 +10,6 @@ __pycache__/
 
 # Jupyter
 .ipynb_checkpoints/
-*.ipynb_checkpoints
 
 # IDE
 .vscode/
@@ -22,3 +21,6 @@ Thumbs.db
 
 # Claude
 .claude/
+
+# Generated outputs (uncomment to ignore)
+# outputs/
