@@ -13,12 +13,14 @@ deep_hw_4/
 │   ├── PLAN.md                 # Implementation plan
 │   └── experiment_log.md       # Experiment tracking
 ├── notebooks/
+│   ├── gan_fixed.ipynb         # **RECOMMENDED** Mixture model GAN (fixes detection issue)
 │   ├── main.ipynb              # Main GAN implementation (VGM + WGAN-GP)
 │   ├── baseline.ipynb          # Simplified baseline (MinMax scaling)
 │   ├── improved.ipynb          # Improved version experiments
 │   ├── ctgan.ipynb             # CTGAN-style modifications
 │   └── eda.ipynb               # Exploratory Data Analysis
 ├── outputs/
+│   ├── gan_fixed/              # Mixture model GAN outputs
 │   ├── main/                   # Main notebook outputs
 │   ├── baseline/               # Baseline outputs
 │   ├── improved/               # Improved version outputs
@@ -66,11 +68,27 @@ The Adult dataset (Census Income) contains demographic information to predict wh
 
 | Notebook | Description |
 |----------|-------------|
+| `gan_fixed_v2.ipynb` | **LATEST** - V5 with quantile/moment/correlation losses |
+| `gan_fixed.ipynb` | V4 - Mixture model GAN with explicit zero/peak handling |
 | `main.ipynb` | Full implementation with VGM transformation and advanced techniques |
 | `baseline.ipynb` | Simplified version with MinMax scaling |
 | `improved.ipynb` | Experimental improvements |
 | `ctgan.ipynb` | CTGAN-style architecture modifications |
 | `eda.ipynb` | Data exploration and visualization |
+
+## Key Innovation (gan_fixed.ipynb)
+
+The main issue with standard GANs on tabular data is that neural networks cannot model **point masses**:
+- `capital-gain`: 91% are exactly 0
+- `capital-loss`: 95% are exactly 0
+- `hours-per-week`: 47% are exactly 40
+
+The `gan_fixed.ipynb` notebook solves this with **mixture models**:
+```
+P(x) = p_special * delta(special_value) + (1-p_special) * P_continuous(x)
+```
+
+The generator outputs separate indicators for special values and samples from them at generation time.
 
 ## References
 
