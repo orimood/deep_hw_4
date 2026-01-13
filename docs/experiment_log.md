@@ -1031,20 +1031,107 @@ Activations:
   - Categorical: Gumbel-softmax → hard one-hot
 ```
 
-### V9 Expected Results
+### V9 Results (Seed 42) ✅ SIGNIFICANT IMPROVEMENT
 
-Based on gan_fixed_v2 performance (V5-V7), expecting:
-- Detection AUC: ~0.97-0.98 (similar to V5-V7)
-- Efficacy: ~0.54-0.57
+| Metric | GAN | cGAN | Target |
+|--------|-----|------|--------|
+| **Detection AUC** | 0.8974 | **0.8694** | < 0.70 |
+| **Efficacy** | 0.6089 | **0.9540** | > 0.85 |
 
-This is a working baseline. The ~97% detection is the best achieved without breaking correlations.
+### V9 vs Previous Versions
 
-### V9 Results (Pending)
+| Version | Detection AUC | Efficacy | Notes |
+|---------|---------------|----------|-------|
+| V5-V7 | 0.97-0.98 | 0.54-0.57 | Complex losses, no improvement |
+| V8 (bugged) | 1.0000 | 0.58 | Wrong encoding |
+| **V9 GAN** | **0.8974** | **0.6089** | -10% detection! |
+| **V9 cGAN** | **0.8694** | **0.9540** | Best results! |
 
-| Metric | GAN (seed 42) | cGAN (seed 42) |
-|--------|---------------|----------------|
-| Detection AUC | *Pending* | *Pending* |
-| Efficacy | *Pending* | *Pending* |
+### What Made V9 Work (Architecture Analysis)
+
+#### 1. Skip Connections in Generator
+```python
+h3 = h3 + self.skip_proj(h1)  # Residual path from layer 1 to layer 3
+```
+- Helps gradient flow during training
+- Allows generator to learn identity mapping for well-matched features
+- Prevents vanishing gradients in deep network
+
+#### 2. Learned Per-Feature Variance
+```python
+self.cont_scale = nn.Parameter(torch.ones(n_cont))
+self.cont_bias = nn.Parameter(torch.zeros(n_cont))
+# During forward:
+value = value * self.cont_scale[idx] + self.cont_bias[idx]
+```
+- Each continuous feature gets learnable scale and bias
+- Allows different features to have different output ranges
+- More flexible than fixed sigmoid [0,1] output
+
+#### 3. Training-Time Noise Injection
+```python
+if self.training:
+    noise = torch.randn_like(base_val) * torch.exp(0.5 * log_var) * 0.1
+    value = torch.clamp(base_val + noise, 0, 1)
+```
+- Adds learned noise during training for regularization
+- Wider noise (0.15) for peak-inflated features (hours-per-week)
+- Prevents overfitting to specific values
+
+#### 4. Education-num as Categorical
+- Changed from continuous (1 dim) to categorical (16 dims one-hot)
+- Real data has discrete values (1-16), not continuous
+- Gumbel-softmax produces exact discrete outputs
+
+#### 5. Log Transform for fnlwgt
+```python
+if col in self.log_transform:
+    values = np.log1p(values)
+```
+- fnlwgt is highly right-skewed (range: 12k - 1.5M)
+- Log transform compresses range, makes distribution more normal
+- Easier for generator to learn
+
+#### 6. Multiple Auxiliary Losses Working Together
+```python
+g_loss = (g_loss_wgan +
+         1.0 * proportion_loss +    # Match zero/peak proportions
+         0.5 * quantile_loss +      # Match 20 quantile points
+         0.5 * moment_loss +        # Match mean, std, skewness
+         1.0 * correlation_loss +   # Preserve feature correlations
+         0.2 * categorical_loss)    # Match category frequencies
+```
+- **Correlation loss (λ=1.0)** is key - preserves relationships between features
+- Without it, RF detects via broken correlations (V7 inverse CDF problem)
+
+#### 7. cGAN Label Conditioning (Why cGAN >> GAN)
+```python
+# Generator: concat label to input
+z = torch.cat([z, labels_onehot], dim=1)
+
+# Discriminator: concat label to input
+x = torch.cat([x, labels_onehot], dim=1)
+```
+- cGAN learns **class-conditional distributions**
+- Income <=50K and >50K have different feature distributions
+- Generator can specialize outputs per class
+- Results: Efficacy 0.95 (cGAN) vs 0.61 (GAN)
+
+### Why cGAN Dramatically Outperforms GAN
+
+| Aspect | GAN | cGAN |
+|--------|-----|------|
+| Label handling | Copies from training set | Generates with correct class patterns |
+| Feature distributions | Must average across classes | Learns per-class distributions |
+| Efficacy | 0.6089 | **0.9540** |
+
+The Adult dataset has **class-dependent features**:
+- High income → higher education, more hours, capital gains
+- Low income → different distribution patterns
+
+cGAN learns these conditional patterns; GAN averages them together.
+
+### V9 Results (3-seed average) - Pending
 
 | Metric | GAN (3-seed avg) | cGAN (3-seed avg) |
 |--------|------------------|-------------------|
@@ -1062,8 +1149,9 @@ This is a working baseline. The ~97% detection is the best achieved without brea
 | V5 | + Quantile/Moment loss | 0.9802 | 0.5692 | Minimal improvement |
 | V6 | + Histogram loss | 0.9732 | 0.5383 | Marginal improvement |
 | V7 | Inverse CDF | 0.9779 | 0.5451 | Broke correlations |
-| V8 | Simple final.ipynb | **1.0000** | 0.5843 | **BUG: wrong encoding** |
-| V9 | Integrated fixes | *Pending* | *Pending* | Should match V5-V7 |
+| V8 | Simple final.ipynb | 1.0000 | 0.5843 | BUG: wrong encoding |
+| **V9 GAN** | Skip conn + losses | **0.8974** | **0.6089** | ✅ Major improvement |
+| **V9 cGAN** | + Label conditioning | **0.8694** | **0.9540** | ✅ **BEST RESULTS** |
 
 ---
 
@@ -1078,4 +1166,6 @@ This is a working baseline. The ~97% detection is the best achieved without brea
 7. ✅ Created V8 final.ipynb with both GAN and cGAN
 8. ❌ V8 had critical bug - Detection AUC = 1.0
 9. ✅ Fixed bug and integrated gan_fixed_v2 elements (V9)
-10. ⏳ Run V9 final.ipynb and report results for all 3 seeds
+10. ✅ V9 seed 42 results: GAN 0.90/0.61, cGAN **0.87/0.95** 🎉
+11. ⏳ Run remaining seeds (123, 456) and compute averages
+12. ⏳ Write final report with analysis
